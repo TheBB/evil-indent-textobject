@@ -3,7 +3,8 @@
 ;; Copyright (C) 2013 Michael Markert
 ;; Author: Michael Markert <markert.michael@gmail.com>
 ;; Created: 2013-08-31
-;; Version: 0.2
+;; Version: 20130831.1519
+;; X-Original-Version: 0.2
 ;; Keywords: convenience evil
 ;; URL: http://github.com/cofi/evil-indent-textobject
 ;; Package-Requires: ((evil "0"))
@@ -48,13 +49,6 @@
 (require 'cl-lib)
 (require 'evil)
 
-(defun evil-indent--current-indentation ()
-  "Return the indentation of the current line.
-Moves point."
-  (buffer-substring-no-properties (point-at-bol)
-                                  (progn (back-to-indentation)
-                                         (point))))
-
 (defun evil-indent--same-indent-range (&optional point)
   "Return the point at the begin and end of the text block with the same indentation.
 If `point' is supplied and non-nil it will return the begin and
@@ -63,16 +57,16 @@ end of the block surrounding point."
     (when point
       (goto-char point))
     (let ((start (point))
-          (indent (evil-indent--current-indentation))
+          (indent (current-indentation))
           begin end)
       (loop while (and (/= (point) (point-min))
-                       (string= (evil-indent--current-indentation) indent))
+                       (>= (current-indentation) indent))
             do (progn
                  (setq begin (point-at-bol))
                  (forward-line -1)))
       (goto-char start)
       (loop while (and (/= (point) (point-max))
-                       (string= (evil-indent--current-indentation) indent))
+                       (>= (current-indentation) indent))
             do (progn
                  (setq end (point-at-eol))
                  (forward-line 1)))
