@@ -1,10 +1,10 @@
 ;;; evil-indent-textobject.el --- evil textobjects based on indentation
 
-;; Copyright (C) 2013 Michael Markert
-;; Author: Michael Markert <markert.michael@gmail.com>
-;; Created: 2013-08-31
-;; Version: 20130831.1519
-;; X-Original-Version: 0.2
+;; Original evil-indent-textobject.el Copyright (C) 2013 Michael Markert
+;; Modifications Copyright (C) 2014 Eivind Fonn
+;; Author: Eivind Fonn <evfonn@gmail.com>
+;; Created: 2014-08-31
+;; Version: 0.2.1
 ;; Keywords: convenience evil
 ;; URL: http://github.com/cofi/evil-indent-textobject
 ;; Package-Requires: ((evil "0"))
@@ -49,10 +49,18 @@
 (require 'cl-lib)
 (require 'evil)
 
+(defun evil-indent--chomp (str)
+  "Chomp leading and tailing whitespace from STR."
+  (while (string-match "\\`\n+\\|^\\s-+\\|\\s-+$\\|\n+\\'" str)
+    (setq str (replace-match "" t t str)))
+  str)
+
+(defun evil-indent--empty-line-p ()
+  (string= "" (evil-indent--chomp (thing-at-point 'line))))
+
 (defun evil-indent--same-indent-range (&optional point)
-  "Return the point at the begin and end of the text block with the same indentation.
-If `point' is supplied and non-nil it will return the begin and
-end of the block surrounding point."
+  "Return the point at the begin and end of the text block with the same (or greater) indentation.
+If `point' is supplied and non-nil it will return the begin and end of the block surrounding point."
   (save-excursion
     (when point
       (goto-char point))
@@ -60,46 +68,78 @@ end of the block surrounding point."
           (indent (current-indentation))
           begin end)
       (loop while (and (/= (point) (point-min))
-                       (>= (current-indentation) indent))
+                       (or (>= (current-indentation) indent)
+                           (evil-indent--empty-line-p)))
             do (progn
                  (setq begin (point-at-bol))
                  (forward-line -1)))
+      (goto-char begin)
+      (loop while (and (/= (point) (point-max))
+                       (evil-indent--empty-line-p))
+            do (progn
+                 (forward-line 1)
+                 (setq begin (point-at-bol))))
       (goto-char start)
       (loop while (and (/= (point) (point-max))
-                       (>= (current-indentation) indent))
+                       (or (>= (current-indentation) indent)
+                           (evil-indent--empty-line-p)))
             do (progn
                  (setq end (point-at-eol))
                  (forward-line 1)))
+      (goto-char end)
+      (loop while (and (/= (point) (point-min))
+                       (evil-indent--empty-line-p))
+            do (progn
+                 (forward-line -1)
+                 (setq end (point-at-bol))))
       (list begin end))))
 
 (evil-define-text-object evil-indent-a-indent (&optional count beg end type)
-  "Text object describing the block with the same indentation as
-the current line and the line above."
+  "Text object describing the block with the same (or greater) indentation as the current line and
+the line above, skipping empty lines."
   :type line
-  (let ((range (evil-indent--same-indent-range)))
-    (evil-range (save-excursion
-                  (goto-char (first (evil-indent--same-indent-range)))
-                  (forward-line -1)
-                  (point-at-bol))
-                (second range) 'line)))
+  (let* ((range (evil-indent--same-indent-range))
+         (begin (first range)))
+    (save-excursion
+      (goto-char begin)
+      (forward-line -1)
+      (loop while (and (/= (point) (point-min))
+                       (evil-indent--empty-line-p))
+            do (progn
+                 (setq begin (point-at-bol))
+                 (forward-line -1)))
+      (setq begin (point-at-bol)))
+    (evil-range begin (second range) 'line)))
 
 (evil-define-text-object evil-indent-a-indent-lines (&optional count beg end type)
-  "Text object describing the block with the same indentation as
-the current line and the lines above and below."
+  "Text object describing the block with the same (or greater) indentation as the current line and
+the lines above and below, skipping empty lines."
   :type line
-  (let ((range (evil-indent--same-indent-range)))
-    (evil-range (save-excursion
-                  (goto-char (first range))
-                  (forward-line -1)
-                  (point-at-bol))
-                (save-excursion
-                  (goto-char (second range))
-                  (forward-line 1)
-                  (point-at-eol)) 'line)))
+  (let* ((range (evil-indent--same-indent-range))
+         (begin (first range))
+         (end (second range)))
+    (save-excursion
+      (goto-char begin)
+      (forward-line -1)
+      (loop while (and (/= (point) (point-min))
+                       (evil-indent--empty-line-p))
+            do (progn
+                 (setq begin (point-at-bol))
+                 (forward-line -1)))
+      (setq begin (point-at-bol))
+      (goto-char end)
+      (forward-line 1)
+      (loop while (and (/= (point) (point-max))
+                       (evil-indent--empty-line-p))
+            do (progn
+                 (setq end (point-at-bol))
+                 (forward-line 1)))
+      (setq end (point-at-bol)))
+    (evil-range begin end 'line)))
 
 (evil-define-text-object evil-indent-i-indent (&optional count beg end type)
-  "Text object describing the block with the same indentation as
-the current line."
+  "Text object describing the block with the same (or greater) indentation as the current line,
+skipping empty lines."
   :type line
   (let ((range (evil-indent--same-indent-range)))
     (evil-range (first range) (second range) 'line)))
