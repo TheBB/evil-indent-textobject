@@ -58,57 +58,58 @@
 (defun evil-indent--empty-line-p ()
   (string= "" (evil-indent--chomp (thing-at-point 'line))))
 
+(defun evil-indent--geq-p ()
+  (>= (current-indentation) base))
+
+(defun evil-indent--geq-or-empty-p ()
+  (or (evil-indent--empty-line-p) (evil-indent--geq-p)))
+
+(defun evil-indent--g-p ()
+  (> (current-indentation) base))
+
+(defun evil-indent--g-or-empty-p ()
+  (or (evil-indent--empty-line-p) (evil-indent--g-p)))
+
+(defun evil-indent--seek (start direction before predicate)
+  "Seeks forward (if direction is 1) or backward (if direction is -1) from start, until predicate
+fails. If before is nil, it will return the first line where predicate fails, otherwise it returns
+the last line where predicate holds."
+  (save-excursion
+    (goto-char start)
+    (goto-char (point-at-bol))
+    (let ((bnd (if (> 0 direction)
+                   (point-min)
+                 (point-max)))
+          (pt (point)))
+      (loop while (and (/= (point) bnd) (funcall predicate))
+            do (progn
+                 (when before (setq pt (point-at-bol)))
+                 (forward-line direction)
+                 (unless before (setq pt (point-at-bol)))))
+      pt)))
+
 (defun evil-indent--same-indent-range (&optional point)
   "Return the point at the begin and end of the text block with the same (or greater) indentation.
 If `point' is supplied and non-nil it will return the begin and end of the block surrounding point."
   (save-excursion
     (when point
       (goto-char point))
-    (let ((start (point))
-          (indent (current-indentation))
-          begin end)
-      (loop while (and (/= (point) (point-min))
-                       (or (>= (current-indentation) indent)
-                           (evil-indent--empty-line-p)))
-            do (progn
-                 (setq begin (point-at-bol))
-                 (forward-line -1)))
-      (goto-char begin)
-      (loop while (and (/= (point) (point-max))
-                       (evil-indent--empty-line-p))
-            do (progn
-                 (forward-line 1)
-                 (setq begin (point-at-bol))))
-      (goto-char start)
-      (loop while (and (/= (point) (point-max))
-                       (or (>= (current-indentation) indent)
-                           (evil-indent--empty-line-p)))
-            do (progn
-                 (setq end (point-at-eol))
-                 (forward-line 1)))
-      (goto-char end)
-      (loop while (and (/= (point) (point-min))
-                       (evil-indent--empty-line-p))
-            do (progn
-                 (forward-line -1)
-                 (setq end (point-at-bol))))
-      (list begin end))))
+    (let ((begin (point))
+          (end (point))
+          (base (current-indentation)))
+      (setq begin (evil-indent--seek begin -1 t 'evil-indent--geq-or-empty-p))
+      (setq begin (evil-indent--seek begin 1 nil 'evil-indent--g-or-empty-p))
+      (setq end (evil-indent--seek end 1 t 'evil-indent--geq-or-empty-p))
+      (setq end (evil-indent--seek end -1 nil 'evil-indent--empty-line-p))
+      (list begin end base))))
 
 (evil-define-text-object evil-indent-a-indent (&optional count beg end type)
   "Text object describing the block with the same (or greater) indentation as the current line and
 the line above, skipping empty lines."
   :type line
   (let* ((range (evil-indent--same-indent-range))
-         (begin (first range)))
-    (save-excursion
-      (goto-char begin)
-      (forward-line -1)
-      (loop while (and (/= (point) (point-min))
-                       (evil-indent--empty-line-p))
-            do (progn
-                 (setq begin (point-at-bol))
-                 (forward-line -1)))
-      (setq begin (point-at-bol)))
+         (base (third range))
+         (begin (evil-indent--seek (first range) -1 nil 'evil-indent--geq-or-empty-p)))
     (evil-range begin (second range) 'line)))
 
 (evil-define-text-object evil-indent-a-indent-lines (&optional count beg end type)
@@ -116,25 +117,9 @@ the line above, skipping empty lines."
 the lines above and below, skipping empty lines."
   :type line
   (let* ((range (evil-indent--same-indent-range))
-         (begin (first range))
-         (end (second range)))
-    (save-excursion
-      (goto-char begin)
-      (forward-line -1)
-      (loop while (and (/= (point) (point-min))
-                       (evil-indent--empty-line-p))
-            do (progn
-                 (setq begin (point-at-bol))
-                 (forward-line -1)))
-      (setq begin (point-at-bol))
-      (goto-char end)
-      (forward-line 1)
-      (loop while (and (/= (point) (point-max))
-                       (evil-indent--empty-line-p))
-            do (progn
-                 (setq end (point-at-bol))
-                 (forward-line 1)))
-      (setq end (point-at-bol)))
+         (base (third range))
+         (begin (evil-indent--seek (first range) -1 nil 'evil-indent--geq-or-empty-p))
+         (end (evil-indent--seek (second range) 1 nil 'evil-indent--geq-or-empty-p)))
     (evil-range begin end 'line)))
 
 (evil-define-text-object evil-indent-i-indent (&optional count beg end type)
